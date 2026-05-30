@@ -11,8 +11,12 @@ module.exports = function (api) {
           extensions: ['.ts', '.tsx', '.js', '.jsx'],
         },
       ],
-      // Fix: Replace dynamic imports with variable expressions (e.g. import(OTEL_PKG))
-      // that Hermes cannot compile. Caused by @supabase/supabase-js OpenTelemetry support.
+      // Fix private class fields (#field) incompatible with older Hermes
+      '@babel/plugin-transform-class-properties',
+      '@babel/plugin-transform-private-methods',
+
+      // Fix dynamic variable imports incompatible with Hermes
+      // Caused by @supabase/supabase-js OpenTelemetry support
       function fixDynamicVariableImports({ types: t }) {
         return {
           visitor: {

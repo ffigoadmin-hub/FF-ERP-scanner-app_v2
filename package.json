@@ -40,6 +40,8 @@
   },
   "devDependencies": {
     "@babel/core": "^7.24.0",
+    "@babel/plugin-transform-class-properties": "^7.29.7",
+    "@babel/plugin-transform-private-methods": "^7.29.7",
     "@types/react": "~19.1.10",
     "babel-preset-expo": "^56.0.14",
     "typescript": "~5.9.2"
