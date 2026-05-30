@@ -1,0 +1,68 @@
+{
+  "expo": {
+    "name": "FF Scanner",
+    "slug": "ff-scanner-v2",
+    "version": "2.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1A5240"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.farmersfactory.scanner",
+      "infoPlist": {
+        "NSCameraUsageDescription": "FF Scanner uses the camera to scan QR codes and barcodes on boxes.",
+        "NSPhotoLibraryUsageDescription": "FF Scanner accesses photos for wastage evidence.",
+        "NSLocationWhenInUseUsageDescription": "FF Scanner uses your location to auto-select the nearest hub."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1A5240"
+      },
+      "package": "com.farmersfactory.scanner",
+      "permissions": [
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        { "cameraPermission": "Allow FF Scanner to access your camera to scan box labels." }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "FF Scanner uses photos to document wastage evidence.",
+          "cameraPermission": "FF Scanner uses the camera to photograph wastage items."
+        }
+      ],
+      [
+        "expo-location",
+        { "locationAlwaysAndWhenInUsePermission": "FF Scanner uses your location to auto-select the nearest hub." }
+      ],
+      [
+        "expo-notifications",
+        { "icon": "./assets/icon.png", "color": "#2D7A5F", "sounds": [] }
+      ]
+    ],
+    "scheme": "ff-scanner",
+    "extra": {
+      "eas": { "projectId": "your-eas-project-id" }
+    }
+  }
+}
