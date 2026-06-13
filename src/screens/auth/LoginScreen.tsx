@@ -10,9 +10,9 @@ import { supabase } from '@/lib/supabase';
 import { Colors, Typography, Radii, Shadows, Spacing } from '@/theme';
 
 const HUB_HINTS = [
-  { label: 'Hyderabad Hub',  email: 'manager.hyd@ffactory.com',  code: 'HYD',  color: '#2D7A5F' },
-  { label: 'Palikarani Hub', email: 'manager.pali@ffactory.com', code: 'PALI', color: '#3D7A2D' },
-  { label: 'Vanagaram Hub',  email: 'manager.vana@ffactory.com', code: 'VANA', color: '#2D5E7A' },
+  { label: 'Hyderabad Hub',  email: 'manager.hyd@ffactory.com',       code: 'HYD',  color: '#2D7A5F' },
+  { label: 'Palikarani Hub', email: 'manager.pali@ffactory.com',      code: 'PALI', color: '#3D7A2D' },
+  { label: 'Vanagaram Hub',  email: 'manager.vanagaram@ffactory.com', code: 'VANA', color: '#2D5E7A' },
 ];
 
 export default function LoginScreen() {

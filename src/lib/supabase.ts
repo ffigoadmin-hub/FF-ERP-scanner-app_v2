@@ -50,14 +50,28 @@ export async function getHubBoxes(hubId: string, status?: string) {
   return q;
 }
 
-// ─── Inventory log ────────────────────────────────────────────
+// ─── Inventory log + stock update ────────────────────────────
+// Logs the event AND updates the live `inventory` table so
+// ProductPicker always shows current stock.
 
 export async function logInventoryEvent(params: {
-  hubId: string; productId: string; eventType: string;
-  qtyDelta: number; refId?: string; refType?: string;
-  notes?: string; createdBy?: string;
+  hubId:      string;
+  productId:  string;
+  eventType:  string;
+  qtyDelta:   number;
+  refId?:     string;
+  refType?:   string;
+  notes?:     string;
+  createdBy?: string;
 }) {
-  return supabase.from('inventory_log').insert({
+  // Guard: skip if productId is blank (missing product on box)
+  if (!params.productId) {
+    console.warn('[logInventoryEvent] skipped — productId is empty');
+    return { data: null, error: null };
+  }
+
+  // 1. Write to audit ledger
+  const logResult = await supabase.from('inventory_log').insert({
     hub_id:     params.hubId,
     product_id: params.productId,
     event_type: params.eventType,
@@ -67,6 +81,33 @@ export async function logInventoryEvent(params: {
     notes:      params.notes     ?? null,
     created_by: params.createdBy ?? null,
   }).select().single();
+
+  // 2. Update live inventory stock (read → increment → upsert)
+  try {
+    const { data: current } = await supabase
+      .from('inventory')
+      .select('quantity')
+      .eq('hub_id', params.hubId)
+      .eq('product_id', params.productId)
+      .single();
+
+    const newQty = Math.max(0, (current?.quantity ?? 0) + params.qtyDelta);
+
+    await supabase.from('inventory').upsert(
+      {
+        hub_id:     params.hubId,
+        product_id: params.productId,
+        quantity:   newQty,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'hub_id,product_id' }
+    );
+  } catch (e) {
+    // Non-fatal — ledger was written; stock update can be reconciled later
+    console.warn('[logInventoryEvent] inventory sync failed:', e);
+  }
+
+  return logResult;
 }
 
 export async function getHubInventoryToday(hubId: string) {
@@ -79,20 +120,33 @@ export async function getHubInventoryToday(hubId: string) {
     .lte('created_at', `${today}T23:59:59`);
 }
 
-// ─── Wastage ─────────────────────────────────────────────────
+// ─── Wastage entries ──────────────────────────────────────────
 
-export async function logWastage(params: {
-  boxId: string; hubId: string; productId: string;
-  reason: string; weightKg: number; photoUrl?: string; loggedBy?: string;
+export async function logWastageEntry(params: {
+  hubId:       string;
+  hubName:     string;
+  itemName:    string;
+  quantityKg:  number;
+  amount?:     number;
+  reason?:     string;
+  photo1Url?:  string;
+  photo2Url?:  string;
+  notes?:      string;
+  submittedBy: string;
 }) {
-  return supabase.from('wastage_log').insert({
-    box_id:     params.boxId,
-    hub_id:     params.hubId,
-    product_id: params.productId,
-    reason:     params.reason,
-    weight_kg:  params.weightKg,
-    photo_url:  params.photoUrl  ?? null,
-    logged_by:  params.loggedBy  ?? null,
+  const today = new Date().toISOString().split('T')[0];
+  return supabase.from('wastage_entries').insert({
+    hub_id:       params.hubId,
+    hub_name:     params.hubName,
+    item_name:    params.itemName,
+    quantity_kg:  params.quantityKg,
+    amount:       params.amount    ?? null,
+    reason:       params.reason    ?? null,
+    photo_1_url:  params.photo1Url ?? null,
+    photo_2_url:  params.photo2Url ?? null,
+    entry_date:   today,
+    submitted_by: params.submittedBy,
+    notes:        params.notes     ?? null,
   }).select().single();
 }
 
@@ -127,7 +181,7 @@ export async function updatePackStatus(packId: string, status: string) {
 export async function getProfile(userId: string) {
   const joined = await supabase
     .from('profiles')
-    .select('*, hub:hubs(id,name,code,address,lat,lng,radius_km)')
+    .select('*, hub:hubs(id,name,code,address,city,state)')
     .eq('id', userId)
     .single();
 
@@ -138,7 +192,7 @@ export async function getProfile(userId: string) {
 
   if (!plain.error && plain.data?.hub_id) {
     const { data: hub } = await supabase
-      .from('hubs').select('id,name,code,address,lat,lng,radius_km')
+      .from('hubs').select('id,name,code,address,city,state')
       .eq('id', plain.data.hub_id).single();
     if (hub) (plain.data as any).hub = hub;
   }
