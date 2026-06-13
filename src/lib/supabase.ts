@@ -16,11 +16,21 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 // ─── Box helpers ─────────────────────────────────────────────
 
 export async function getBoxByCode(boxCode: string) {
-  return supabase
+  // Try exact match first
+  const { data, error } = await supabase
     .from('boxes')
     .select('*, product:products(id,name,sku,unit,image_url), hub:hubs(id,name,code)')
     .eq('box_code', boxCode)
-    .single();
+    .maybeSingle();
+  if (data) return { data, error: null };
+
+  // Fallback: case-insensitive search (handles scanner returning different case)
+  const { data: data2, error: error2 } = await supabase
+    .from('boxes')
+    .select('*, product:products(id,name,sku,unit,image_url), hub:hubs(id,name,code)')
+    .ilike('box_code', boxCode)
+    .maybeSingle();
+  return { data: data2, error: error2 };
 }
 
 export async function getBoxById(boxId: string) {
@@ -28,7 +38,7 @@ export async function getBoxById(boxId: string) {
     .from('boxes')
     .select('*, product:products(id,name,sku,unit,image_url), hub:hubs(id,name,code)')
     .eq('id', boxId)
-    .single();
+    .maybeSingle();
 }
 
 export async function updateBoxStatus(boxId: string, status: string, receivingHubId?: string) {

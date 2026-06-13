@@ -34,7 +34,10 @@ export default function ScanReceiveScreen({ navigation }: any) {
         : await getBoxByCode(data);
 
       if (error || !boxData) {
-        Alert.alert('Not Found', 'Box not found in system. Check the code and try again.');
+        Alert.alert(
+          'Not Found',
+          `Box "${data}" not found in system.\n\nMake sure this box was created by the EOD PO engine and the QR code is correct.`
+        );
         setLoading(false); return;
       }
       setBox(boxData as Box);
