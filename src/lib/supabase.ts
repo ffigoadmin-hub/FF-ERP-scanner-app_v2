@@ -31,10 +31,12 @@ export async function getBoxById(boxId: string) {
     .single();
 }
 
-export async function updateBoxStatus(boxId: string, status: string) {
+export async function updateBoxStatus(boxId: string, status: string, receivingHubId?: string) {
+  const payload: any = { status, updated_at: new Date().toISOString() };
+  if (receivingHubId) payload.hub_id = receivingHubId;
   return supabase
     .from('boxes')
-    .update({ status, updated_at: new Date().toISOString() })
+    .update(payload)
     .eq('id', boxId)
     .select()
     .single();
