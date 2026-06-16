@@ -6,7 +6,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/context/AuthContext';
-import { getBoxByCode, getBoxById, updateBoxStatus, logInventoryEvent } from '@/lib/supabase';
+import { getBoxByCode, getBoxById, updateBoxStatus, logInventoryEvent, withTimeout } from '@/lib/supabase';
 import ScannerCamera from '@/components/scanner/ScannerCamera';
 import Badge from '@/components/ui/Badge';
 import { Colors, Typography, Radii, Shadows, Spacing } from '@/theme';
@@ -14,37 +14,56 @@ import { Box, QRPayload } from '@/types';
 
 export default function ScanReceiveScreen({ navigation }: any) {
   const { profile, hub } = useAuth();
-  const [scanning, setScanning] = useState(false);
-  const [box, setBox]           = useState<Box | null>(null);
-  const [loading, setLoading]   = useState(false);
-  const [done, setDone]         = useState(false);
+  const [scanning, setScanning]     = useState(false);
+  const [box, setBox]               = useState<Box | null>(null);
+  const [loading, setLoading]       = useState(false);
+  const [done, setDone]             = useState(false);
+  const [lastScanCode, setLastScan] = useState<string>('');  // for retry
 
   const statusColor: Record<string, 'green'|'orange'|'red'|'blue'|'gray'> = {
     received: 'green', qc_passed: 'green', qc_failed: 'red',
     dispatched: 'blue', created: 'gray', wasted: 'red',
   };
 
-  // Fixed: receives (data, parsed) directly from ScannerCamera
-  const handleScan = async (data: string, parsed: QRPayload | null) => {
-    setScanning(false);
+  // Core lookup — shared by handleScan and retry
+  const fetchBox = async (data: string, parsed: QRPayload | null) => {
     setLoading(true);
+    setLastScan(data);
     try {
-      const { data: boxData, error } = parsed?.box_id
-        ? await getBoxById(parsed.box_id)
-        : await getBoxByCode(data);
+      const lookupCode = parsed?.box_id ? null : ((parsed as any)?.box_code ?? data);
+      const { data: boxData, error } = await withTimeout(
+        parsed?.box_id
+          ? getBoxById(parsed.box_id)
+          : getBoxByCode(lookupCode!),
+        12000  // 12 s — gives time on weak networks but doesn't hang forever
+      );
 
       if (error || !boxData) {
         Alert.alert(
           'Not Found',
-          `Box "${data}" not found in system.\n\nMake sure this box was created by the EOD PO engine and the QR code is correct.`
+          `Box "${data}" not found.\n\nMake sure the EOD PO engine ran and the label is correct.`
         );
-        setLoading(false); return;
+      } else {
+        setBox(boxData as Box);
       }
-      setBox(boxData as Box);
-    } catch (e) {
-      Alert.alert('Error', 'Failed to fetch box details.');
+    } catch (e: any) {
+      const isTimeout = e?.message === 'TIMEOUT';
+      Alert.alert(
+        isTimeout ? 'Network Timeout' : 'Error',
+        isTimeout
+          ? 'Request timed out. Check your connection and tap Retry.'
+          : 'Failed to fetch box details. Please try again.',
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
+  };
+
+  // Called by ScannerCamera
+  const handleScan = async (data: string, parsed: QRPayload | null) => {
+    setScanning(false);
+    await fetchBox(data, parsed);
   };
 
   const handleReceive = async () => {
@@ -79,7 +98,8 @@ export default function ScanReceiveScreen({ navigation }: any) {
     navigation.navigate('QC', { box });
   };
 
-  const reset = () => { setBox(null); setDone(false); setScanning(false); };
+  const reset  = () => { setBox(null); setDone(false); setScanning(false); setLastScan(''); };
+  const retry  = () => { if (lastScanCode) fetchBox(lastScanCode, null); };
 
   if (scanning) {
     return (
@@ -121,6 +141,10 @@ export default function ScanReceiveScreen({ navigation }: any) {
         <View style={styles.loadingWrap}>
           <ActivityIndicator size="large" color={Colors.primary} />
           <Text style={styles.loadingText}>Fetching box details…</Text>
+          <Text style={styles.loadingHint}>Slow network? Waiting up to 12 s…</Text>
+          <TouchableOpacity onPress={reset} style={styles.cancelBtn} activeOpacity={0.7}>
+            <Text style={styles.cancelBtnText}>Cancel</Text>
+          </TouchableOpacity>
         </View>
       )}
 
@@ -218,6 +242,9 @@ const styles = StyleSheet.create({
   scanSubText: { fontSize: Typography.fontSizes.sm, color: Colors.textMuted },
   loadingWrap: { alignItems: 'center', paddingVertical: 48, gap: 12 },
   loadingText: { color: Colors.textMuted, fontSize: Typography.fontSizes.base },
+  loadingHint: { color: Colors.textMuted, fontSize: Typography.fontSizes.sm, opacity: 0.7 },
+  cancelBtn:   { marginTop: 8, paddingHorizontal: 28, paddingVertical: 10, borderRadius: 10, borderWidth: 1.5, borderColor: Colors.primaryBorder },
+  cancelBtnText: { color: Colors.primary, fontWeight: Typography.fontWeights.semibold, fontSize: Typography.fontSizes.base },
   boxCard: { margin: Spacing.base, backgroundColor: Colors.cardBg, borderRadius: Radii.xl, padding: Spacing.base, ...Shadows.md },
   boxHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
   boxCode: { fontSize: Typography.fontSizes.xl, fontWeight: Typography.fontWeights.black, color: Colors.textPrimary },
@@ -229,15 +256,4 @@ const styles = StyleSheet.create({
   detailValue: { fontSize: Typography.fontSizes.base, color: Colors.textPrimary, fontWeight: Typography.fontWeights.semibold },
   successWrap: { alignItems: 'center', paddingVertical: 20, gap: 6 },
   successIcon: { width: 90, height: 90, borderRadius: 45, backgroundColor: Colors.successBg, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
-  successTitle: { fontSize: Typography.fontSizes.xl, fontWeight: Typography.fontWeights.black, color: Colors.success },
-  successCode: { fontSize: Typography.fontSizes.lg, fontWeight: Typography.fontWeights.bold, color: Colors.textPrimary },
-  successProduct: { fontSize: Typography.fontSizes.base, color: Colors.textMuted },
-  actions: { marginHorizontal: Spacing.base, gap: 10 },
-  btnReceive: { borderRadius: Radii.lg, overflow: 'hidden', ...Shadows.md },
-  btnGrad: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 15 },
-  btnText: { color: '#fff', fontSize: Typography.fontSizes.md, fontWeight: Typography.fontWeights.bold },
-  btnQC: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderRadius: Radii.lg, borderWidth: 1.5, borderColor: Colors.primaryBorder, backgroundColor: Colors.primaryBg },
-  btnQCText: { color: Colors.primary, fontSize: Typography.fontSizes.md, fontWeight: Typography.fontWeights.semibold },
-  resetBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 16 },
-  resetText: { color: Colors.textMuted, fontSize: Typography.fontSizes.base, fontWeight: Typography.fontWeights.medium },
-});
+  successTitle: { fontSize: Typography.fo

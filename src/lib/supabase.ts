@@ -13,24 +13,30 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   },
 });
 
+// ─── Timeout helper ───────────────────────────────────────────
+// Rejects after `ms` milliseconds with a timeout error.
+export function withTimeout<T>(promise: Promise<T>, ms = 12000): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error('TIMEOUT')), ms)
+    ),
+  ]);
+}
+
 // ─── Box helpers ─────────────────────────────────────────────
 
+const BOX_SELECT = '*, product:products(id,name,sku,unit,image_url), hub:hubs(id,name,code)';
+
 export async function getBoxByCode(boxCode: string) {
-  // Try exact match first
+  // Single ilike query — handles exact match + case variants (FF-PAL vs ff-pal)
+  // ilike on box_code is indexed; single round-trip avoids double-hang on slow networks
   const { data, error } = await supabase
     .from('boxes')
-    .select('*, product:products(id,name,sku,unit,image_url), hub:hubs(id,name,code)')
-    .eq('box_code', boxCode)
-    .maybeSingle();
-  if (data) return { data, error: null };
-
-  // Fallback: case-insensitive search (handles scanner returning different case)
-  const { data: data2, error: error2 } = await supabase
-    .from('boxes')
-    .select('*, product:products(id,name,sku,unit,image_url), hub:hubs(id,name,code)')
+    .select(BOX_SELECT)
     .ilike('box_code', boxCode)
     .maybeSingle();
-  return { data: data2, error: error2 };
+  return { data, error };
 }
 
 export async function getBoxById(boxId: string) {
